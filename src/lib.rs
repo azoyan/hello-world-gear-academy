@@ -27,6 +27,7 @@ unsafe extern "C" fn init() {
         entertained_block: block_timestamp(),
         rested: 10000,
         rested_block: BOREDOM_PER_BLOCK,
+        allowed_account: None,
     });
 }
 
@@ -56,6 +57,18 @@ unsafe extern "C" fn handle() {
                 - (current_timestamp - contract.rested_block) * ENERGY_PER_BLOCK;
             contract.rested_block = current_timestamp;
             TmgEvent::Slept
+        }
+        TmgAction::Transfer(new_owner) => {
+            contract.owner = new_owner;
+            TmgEvent::Transfer(contract.owner)
+        }
+        TmgAction::Approve(allowed_account) => {
+            contract.allowed_account = Some(allowed_account);
+            TmgEvent::Approve(allowed_account)
+        }
+        TmgAction::RevokeApproval => {
+            contract.allowed_account = None;
+            TmgEvent::RevokeApproval
         }
     };
 

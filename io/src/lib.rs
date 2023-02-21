@@ -22,6 +22,9 @@ pub enum TmgAction {
     Feed,
     Play,
     Sleep,
+    Transfer(ActorId),
+    Approve(ActorId),
+    RevokeApproval,
 }
 
 #[derive(Encode, Decode, TypeInfo)]
@@ -31,6 +34,9 @@ pub enum TmgEvent {
     Fed,
     Entertained,
     Slept,
+    Transfer(ActorId),
+    Approve(ActorId),
+    RevokeApproval,
 }
 
 #[derive(Default, Encode, Decode, TypeInfo)]
@@ -44,4 +50,5 @@ pub struct Tamagotchi {
     pub entertained_block: u64,
     pub rested: u64,
     pub rested_block: u64,
+    pub allowed_account: Option<ActorId>,
 }
