@@ -1,6 +1,9 @@
 #![no_std]
+use ft_logic_io::Action;
+use ft_main_io::FTokenAction;
 use gstd::{exec::block_timestamp, msg, prelude::*};
 use io::{Tamagotchi, TmgAction, TmgEvent};
+use store_io::StoreAction;
 
 const HUNGER_PER_BLOCK: u64 = 1; // how much Tamagochi becomes hungry for the block;
 const ENERGY_PER_BLOCK: u64 = 2; // how much Tamagochi loses energy per block;
@@ -28,11 +31,12 @@ unsafe extern "C" fn init() {
         rested: 10000,
         rested_block: BOREDOM_PER_BLOCK,
         allowed_account: None,
+        ft_address: None,
     });
 }
 
-#[no_mangle]
-unsafe extern "C" fn handle() {
+#[gstd::async_main]
+async fn main() {
     let message: TmgAction = msg::load().expect("Wrong input to handle");
     let contract = common_state();
 
@@ -69,6 +73,43 @@ unsafe extern "C" fn handle() {
         TmgAction::RevokeApproval => {
             contract.allowed_account = None;
             TmgEvent::RevokeApproval
+        }
+        TmgAction::ApproveTokens { account, amount } => {
+            // 1. Approve tokens to the Store contract. Send message to FT contract
+            if let Some(ft_address) = contract.ft_address {
+                let action = Action::Approve {
+                    approved_account: account,
+                    amount,
+                }
+                .encode();
+                let payload = FTokenAction::Message {
+                    transaction_id: 1,
+                    payload: action,
+                }
+                .encode();
+                let _reply = msg::send_for_reply(ft_address, payload, 0)
+                    .expect("Can't send message")
+                    .await
+                    .expect("Can't receive reply");
+            }
+            TmgEvent::ApproveTokens { account, amount }
+        }
+        TmgAction::SetFTokenContract(ft_address) => {
+            contract.ft_address = Some(ft_address);
+            TmgEvent::SetFTokenContract
+        }
+        TmgAction::BuyAttribute {
+            store_id,
+            attribute_id,
+        } => {
+            let action = StoreAction::BuyAttribute { attribute_id };
+            let payload = action.encode();
+            // 3. Send message "Buy attribute" to Store contract
+            let _reply = msg::send_for_reply(store_id, payload, 0)
+                .expect("Can't send message")
+                .await
+                .expect("Can't receive reply");
+            TmgEvent::AttributeBought(attribute_id)
         }
     };
 

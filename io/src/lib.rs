@@ -5,6 +5,13 @@ use gmeta::{InOut, Metadata};
 use gstd::{prelude::*, ActorId};
 use scale_info::TypeInfo;
 
+
+
+pub type AttributeId = u32;
+pub type Price = u128;
+pub type TamagotchiId = ActorId;
+pub type TransactionId = u64;
+
 pub struct ProgramMetadata;
 impl Metadata for ProgramMetadata {
     type Init = InOut<String, ()>;
@@ -25,6 +32,15 @@ pub enum TmgAction {
     Transfer(ActorId),
     Approve(ActorId),
     RevokeApproval,
+    ApproveTokens {
+        account: ActorId,
+        amount: u128,
+    },
+    SetFTokenContract(ActorId),
+    BuyAttribute {
+        store_id: ActorId,
+        attribute_id: AttributeId,
+    },
 }
 
 #[derive(Encode, Decode, TypeInfo)]
@@ -37,6 +53,12 @@ pub enum TmgEvent {
     Transfer(ActorId),
     Approve(ActorId),
     RevokeApproval,
+    ApproveTokens { account: ActorId, amount: u128 },
+    ApprovalError,
+    SetFTokenContract,
+    AttributeBought(AttributeId),
+    CompletePrevPurchase(AttributeId),
+    ErrorDuringPurchase,
 }
 
 #[derive(Default, Encode, Decode, TypeInfo)]
@@ -51,4 +73,46 @@ pub struct Tamagotchi {
     pub rested: u64,
     pub rested_block: u64,
     pub allowed_account: Option<ActorId>,
+    pub ft_address: Option<ActorId>,
 }
+
+// pub struct AttributeStore {
+//     admin: ActorId,
+//     ft_contract_id: ActorId,
+//     attributes: BTreeMap<AttributeId, (Metadata, Price)>,
+//     owners: BTreeMap<TamagotchiId, BTreeSet<AttributeId>>,
+// }
+
+// impl Tamagotchi {
+//    pub async fn buy_attribute(&mut self, attribute_id: AttributeId) {
+//         let (transaction_id, attribute_id) = if let Some((transaction_id, prev_attribute_id)) =
+//             self.transactions.get(&msg::source())
+//         {
+//             // if `prev_attribute_id` is not equal to `attribute_id` then it means that transaction didn`t completed
+//             // we ask the tamagotchi contract to complete the previous transaction
+//             if attribute_id != *prev_attribute_id {
+//                 msg::reply(
+//                     StoreEvent::CompletePrevTx {
+//                         attribute_id: *prev_attribute_id,
+//                     },
+//                     0,
+//                 )
+//                 .expect("Error in sending a reply `StoreEvent::CompletePrevTx`");
+//                 return;
+//             }
+//             (*transaction_id, *prev_attribute_id)
+//         } else {
+//             let current_transaction_id = self.transaction_id;
+//             self.transaction_id = self.transaction_id.wrapping_add(1);
+//             self.transactions
+//                 .insert(msg::source(), (current_transaction_id, attribute_id));
+//             (current_transaction_id, attribute_id)
+//         };
+ 
+//         let result = self.sell_attribute(transaction_id, attribute_id).await;
+//         self.transactions.remove(&msg::source());
+ 
+//         msg::reply(StoreEvent::AttributeSold { success: result }, 0)
+//             .expect("Error in sending a reply `StoreEvent::AttributeSold`");
+//     }
+// }
