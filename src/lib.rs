@@ -1,7 +1,12 @@
 #![no_std]
 use ft_logic_io::Action;
 use ft_main_io::FTokenAction;
-use gstd::{exec::block_timestamp, msg, prelude::*};
+use gstd::{
+    exec::{self, block_timestamp},
+    msg,
+    prelude::*,
+    ReservationId,
+};
 use io::{Tamagotchi, TmgAction, TmgEvent};
 use store_io::StoreAction;
 
@@ -31,7 +36,10 @@ unsafe extern "C" fn init() {
         rested: 10000,
         rested_block: BOREDOM_PER_BLOCK,
         allowed_account: None,
-        ft_address: None,
+        ft_contract_id: Default::default(),
+        ft_transaction_id: 0,
+        approve_transaction: None,
+        reservations: vec![],
     });
 }
 
@@ -41,6 +49,8 @@ async fn main() {
     let contract = common_state();
 
     let current_timestamp = block_timestamp();
+    msg::send_delayed(exec::program_id(), TmgAction::CheckState, 0, 60_u32)
+        .expect("Error in sending a delayed message `TmgAction::CheckState`");
     let reply = match message {
         TmgAction::Name => TmgEvent::Name(contract.name.clone()),
         TmgAction::Age => TmgEvent::Age(contract.date_of_birth),
@@ -76,26 +86,26 @@ async fn main() {
         }
         TmgAction::ApproveTokens { account, amount } => {
             // 1. Approve tokens to the Store contract. Send message to FT contract
-            if let Some(ft_address) = contract.ft_address {
-                let action = Action::Approve {
-                    approved_account: account,
-                    amount,
-                }
-                .encode();
-                let payload = FTokenAction::Message {
-                    transaction_id: 1,
-                    payload: action,
-                }
-                .encode();
-                let _reply = msg::send_for_reply(ft_address, payload, 0)
-                    .expect("Can't send message")
-                    .await
-                    .expect("Can't receive reply");
+
+            let action = Action::Approve {
+                approved_account: account,
+                amount,
             }
+            .encode();
+            let payload = FTokenAction::Message {
+                transaction_id: 1,
+                payload: action,
+            }
+            .encode();
+            let _reply = msg::send_for_reply(contract.ft_contract_id, payload, 0)
+                .expect("Can't send message")
+                .await
+                .expect("Can't receive reply");
+
             TmgEvent::ApproveTokens { account, amount }
         }
         TmgAction::SetFTokenContract(ft_address) => {
-            contract.ft_address = Some(ft_address);
+            contract.ft_contract_id = ft_address;
             TmgEvent::SetFTokenContract
         }
         TmgAction::BuyAttribute {
@@ -111,6 +121,31 @@ async fn main() {
                 .expect("Can't receive reply");
             TmgEvent::AttributeBought(attribute_id)
         }
+        TmgAction::CheckState => {
+            if contract.fed < 100 {
+                msg::reply(TmgEvent::FeedMe, 0).expect("Can't send TmgEvent reply");
+                return;
+            } else if contract.rested < 100 {
+                msg::reply(TmgEvent::WantToSleep, 0).expect("Can't send TmgEvent reply");
+                return;
+            } else if contract.entertained < 100 {
+                msg::reply(TmgEvent::PlayWithMe, 0).expect("Can't send TmgEvent reply");
+                return;
+            }
+            panic!("What would we return?");
+        }
+        TmgAction::ReserveGas {
+            reservation_amount,
+            duration,
+        } => {
+            let reservation_id =
+                ReservationId::reserve(reservation_amount, duration).expect("Can't reserve Gas");
+            contract.reservations.push(reservation_id);
+            TmgEvent::GasReserved
+        }
+        TmgAction::Owner => TmgEvent::Owner {
+            owner: contract.owner,
+        },
     };
 
     msg::reply(reply, 0).expect("Can't send TmgEvent reply");
@@ -130,4 +165,23 @@ extern "C" fn state() {
 extern "C" fn metahash() {
     let metahash: [u8; 32] = include!("../.metahash");
     msg::reply(metahash, 0).expect("Failed to share metahash");
+}
+
+#[no_mangle]
+extern "C" fn my_handle_signal() {
+    let contract = unsafe { CONTRACT.get_or_insert(Default::default()) };
+
+    let reservation_id = if !contract.reservations.is_empty() {
+        contract.reservations.remove(0)
+    } else {
+        return;
+    };
+
+    msg::send_from_reservation(
+        reservation_id,
+        exec::program_id(),
+        TmgEvent::MakeReservation,
+        0,
+    )
+    .expect("Can't send TmgEvent::MakeReservation");
 }

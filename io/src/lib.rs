@@ -2,10 +2,8 @@
 
 use codec::{Decode, Encode};
 use gmeta::{InOut, Metadata};
-use gstd::{prelude::*, ActorId};
+use gstd::{prelude::*, ActorId, ReservationId};
 use scale_info::TypeInfo;
-
-
 
 pub type AttributeId = u32;
 pub type Price = u128;
@@ -41,9 +39,15 @@ pub enum TmgAction {
         store_id: ActorId,
         attribute_id: AttributeId,
     },
+    CheckState,
+    ReserveGas {
+        reservation_amount: u64,
+        duration: u32,
+    },
+    Owner,
 }
 
-#[derive(Encode, Decode, TypeInfo)]
+#[derive(Debug, Encode, Decode, TypeInfo)]
 pub enum TmgEvent {
     Name(String),
     Age(u64),
@@ -59,6 +63,12 @@ pub enum TmgEvent {
     AttributeBought(AttributeId),
     CompletePrevPurchase(AttributeId),
     ErrorDuringPurchase,
+    FeedMe,
+    PlayWithMe,
+    WantToSleep,
+    MakeReservation,
+    GasReserved,
+    Owner { owner: ActorId },
 }
 
 #[derive(Default, Encode, Decode, TypeInfo)]
@@ -73,7 +83,10 @@ pub struct Tamagotchi {
     pub rested: u64,
     pub rested_block: u64,
     pub allowed_account: Option<ActorId>,
-    pub ft_address: Option<ActorId>,
+    pub ft_contract_id: ActorId,
+    pub ft_transaction_id: TransactionId,
+    pub approve_transaction: Option<(TransactionId, ActorId, u128)>,
+    pub reservations: Vec<ReservationId>,
 }
 
 // pub struct AttributeStore {
@@ -108,10 +121,10 @@ pub struct Tamagotchi {
 //                 .insert(msg::source(), (current_transaction_id, attribute_id));
 //             (current_transaction_id, attribute_id)
 //         };
- 
+
 //         let result = self.sell_attribute(transaction_id, attribute_id).await;
 //         self.transactions.remove(&msg::source());
- 
+
 //         msg::reply(StoreEvent::AttributeSold { success: result }, 0)
 //             .expect("Error in sending a reply `StoreEvent::AttributeSold`");
 //     }
